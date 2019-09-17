@@ -508,8 +508,10 @@ if (isset($_POST['post'])){
 			$dep = "update `posted_summary` t1 set department = (select department from employee t2 where t2.em_id = t1.em_id ) where t1.department = '' or t1.department is null";
 			mysql_query($dep, connect());
 
-			$update = "update transaction set `posted_id` = '" . $id . "' where em_id = '" . $emid . "' and `trxn_date` between '" . $fdate . "' and '" . $tdate . "' ";
-			mysql_query($update, connect());
+			if ($post_type == 'REGULAR') {
+				$update = "update transaction set `posted_id` = '" . $id . "' where em_id = '" . $emid . "' and `trxn_date` between '" . $fdate . "' and '" . $tdate . "' ";
+				mysql_query($update, connect());
+			}
 			}
 		}
         }
