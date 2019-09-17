@@ -1,0 +1,35 @@
+/* screen */
+div#eScreen {
+	background: url('screenBG.gif') repeat;
+}
+/* dialog window */
+table.dialogWindow {
+	background-color: white;
+	border-collapse: collapse;
+}
+/* dialog window header */
+.dialogWindow th {
+	background-color: silver;
+	background: #897656 url(fc.png) repeat-x;
+	padding: 2px;
+	border-collapse: collapse;
+	border: 0;
+	cursor: move;
+}
+/* dialog window header icon */
+.dialogWindow th img {
+	cursor: pointer;
+	margin: 2px 2px 0 0;
+}
+
+/* dialog window body */
+.dialogWindow td {
+	border-collapse: collapse;
+	border: 0;
+	padding: 0;
+}
+/* dialog window iframe */
+.dialogWindow iframe {
+	border: 0;
+	margin:0;
+}		

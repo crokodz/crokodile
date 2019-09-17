@@ -1,0 +1,570 @@
+<?
+include "config.php";
+$date1 = $_GET['date1'];
+$date2 = $_GET['date2'];
+
+function getTime($time,$id){
+	$s = split(':', $time);
+	if ($id == 1){
+		return $s[0];
+		}
+	elseif ($id == 2){
+		return $s[1];
+		}
+	else{
+		return $s[2];
+		}
+	}
+	
+function getcompany($id){
+	$select = "select * from company where id = '" . $id . "'";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return $row;
+	}
+	
+function h2m($hours){
+	$expl = explode(":", $hours); 
+	return ($expl[0] * 60) + $expl[1];
+	}
+	
+function GetInfo($id){
+	$select = "select `ts`,`salary_based`,`pay_id`,`company_id` from employee where em_id = '" . $id . "'";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return array($row['salary_based'],$row['ts'],$row['pay_id'],$row['company_id']);
+	}
+
+function getpercent($pay, $based){
+	$select = "select reg_rate, ot_rate from pay join ot_rate on (pay.ot = ot_rate.id) where pay.name = '" . $pay . "' and ot_rate.name = '" . $based . "'";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return array($row['reg_rate'],$row['ot_rate']);
+	}
+	
+function getperday($salary,$company,$id){
+	$select = "select factor, days from company where id = '" . $company . "'";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	
+	$factor = $row['factor'];
+	$days = $row['days'];
+	
+	if ($id == 1){
+		return ($salary * 12) / $factor;
+		}
+	elseif ($id == 2){
+		return ($salary / $days);
+		}
+	}
+	
+function m2h($mins) { 
+	if ($mins < 0) { 
+		$min = Abs($mins); 
+		} 
+	else { 
+                $min = $mins; 
+		}	 
+	$H = Floor($min / 60); 
+	$M = ($min - ($H * 60)) / 100; 
+	$hours = $H +  $M; 
+	
+	if ($mins < 0) { 
+                $hours = $hours * (-1); 
+		} 
+	$expl = explode(".", $hours); 
+	$H = $expl[0]; 
+	if (empty($expl[1])) { 
+                $expl[1] = 00; 
+		} 
+	$M = $expl[1]; 
+            if (strlen($M) < 2) { 
+                $M = $M . 0; 
+		} 
+	$hours = $H . ":" . $M; 
+	return $hours; 
+	} 
+	
+function GetShift($id){
+	$select = "select `from`,`to` from shift where shift_code = '" . $id . "'";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return array($row['from'],$row['to']);
+	}
+
+function GetID(){
+        $select = "SELECT MAX(posted_id) AS maxid FROM posted";
+	$result = mysql_query($select,connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return $row['maxid'] + 1;
+        }
+	
+function getNon_Taxable($id, $type){
+	if($type == 'RICE SUBSIDY' or $type == 'DEP. MED. ALL.' or $type == 'LAUNDRY ALL.'){
+		$select = "select amount from employee_non_taxable where `em_id` = '" . $id . "' and `name` = '" . $type . "' and `status` = 'Deminimis' LIMIT 1";
+		}
+	else{
+		$select = "select amount from employee_non_taxable where `em_id` = '" . $id . "' and `name` = '" . $type . "' and `status` = 'pending'";
+		}
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return $row['amount'];
+	}
+	
+function GetPayCode($id,$status){
+	$select = "select name from pay where `name` = '" . $id . "' LIMIT 1";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	$name = $row['name'];
+	
+	$select = "select id from ot_rate where name = '" . $status . "'";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	$ot_id = $row['id'];
+	
+	$select = "select * from pay where name = '" . $name . "' and ot = '" . $ot_id . "'";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return $row;
+	}
+
+function GetSalary($em_id, $date){
+	$select = "select salary from transaction where `em_id` = '" . $em_id . "' and `trxn_date` <= '" . $date . "' order by `trxn_date` desc limit 1 ";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return $row['salary'] / 2;
+	}
+	
+function getTaxable($id){
+	$select = "select sum(amount) as amount from employee_taxable where em_id = '" . $id . "' and (status = 'pending' or status = 'Deminimis') ";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return $row['amount'];
+	}
+	
+function getDeduction($em_id, $type){
+	$select = "select amount from employee_deduction where em_id = '" . $em_id . "' and `name` = '" . $type . "' and `status` = 'pending'  LIMIT 1";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return $row['amount'];
+	}
+	
+function gettin($salary,$type,$status){
+	$select = "select * from tin where status = '" . $status . "' and type = '" . $type . "' and salary <= '" . $salary . "' order by salary desc limit 1";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	
+	$a = $salary - $row['salary'];
+	$b = $a * $row['percent'];
+	$c = $b + $row['exception'];
+	return $c;
+	}
+
+function CS($em_id,$from_date,$to_date){
+	$select = "select * from transaction where `trxn_date` BETWEEN '" . $from_date . "' AND '" . $to_date . "' and em_id = '" . $em_id . "' ";
+	$result = mysql_query($select, connect());
+	$tot = 0;
+	$totx = 0;
+	$tnd = 0;
+	$ut = 0;
+	$late = 0;
+	$absent = 0;
+	$addition = 0;
+	$otmin = 0;
+	$otxmin = 0;
+	$ndlmin = 0;
+	
+	while($row = mysql_fetch_array($result,MYSQL_ASSOC)){
+		if ($row['salary_based'] == 'SEMI-MONTHLY'){
+			$perday = getperday($row['salary'],$_POST['company_id'],1);
+			$salary = $row['salary'] / 2;
+			}
+		elseif ($row['salary_based'] == 'MONTHLY'){
+			$perday = getperday($row['salary'],$_POST['company_id'],1);
+			$salary = $row['salary'];
+			}
+		elseif ($row['salary_based'] == 'DAILY'){
+			if($row['status'] != 'NO WORK'){
+				$perday = $row['salary'];
+				$salary = $salary + $row['salary'];
+				}
+			}
+		elseif ($row['salary_based'] == 'WEEKLY'){
+			$perday = getperday($row['salary'],$_POST['company_id'],2);
+			$salary = $salary + $row['salary']/7;
+			}
+		elseif ($row['salary_based'] == 'HOURLY'){
+			if($row['status'] != 'NO WORK'){
+				$perday = ($row['salary'] / 60) * $cinfo['min'];
+				$salary =  $salary + $perday;
+				}
+			}
+			
+		if($row['status'] == 'ABSENT') 
+			$absent = $absent + 1;
+		
+		$perhour = $perday / 8;
+		$permin = $perhour / 60;
+		
+		if ($row['total'] >= $cinfo['min']){
+			$total = $cinfo['min'];
+			}
+		else{
+			$total = $row['total'];
+			}
+		
+		
+		
+		$paycode = GetPayCode($row['pay_id'],$row['status']);
+		
+		#regular rate
+		if($row['cbot']=='checked'){
+			$ot = $permin * $row['ot'] * $paycode['reg_rate'];
+			$otx = $permin * $row['otx'] * $paycode['ot_rate'];
+			if($row['status'] == 'REGULAR'){
+				$nd = $permin * $row['nd'] * $paycode['ndl'];
+				}
+			else{
+				$nd = $permin * $row['nd'] * $paycode['reg_rate'] * $paycode['ndl'];
+				}
+			}
+		else{
+			$ot = 0;
+			$otx = 0;
+			$nd = 0;
+			}
+		
+		$tot = $tot + $ot;
+		$totx = $totx + $otx;
+		$tnd = $tnd + $nd;
+			
+		$ut = $ut + $row['ut'];
+		$late = $late + $row['late'];
+		
+		$otmin = $otmin + $row['ot'];
+		$otxmin = $otxmin + $row['otx'];
+		$ndlmin = $ndlmin + $row['nd'];
+		}
+		
+	return array('basic' => $salary, 'absent' => $absent, 'late' => $late, 'ot' => $ot, 'perday'=>$perday);
+	}
+	
+function getsss($salary){
+	$select = "select id, ssee, sser, ec from sss where `to` >= '" . $salary . "' order by `from` asc limit 1";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return array($row['id'],$row['ssee'],$row['sser'],$row['ec']);
+	}
+	
+function getpi($salary){
+	if ($salary <= 1500){
+		return $salary * .02;
+		}
+	else{
+		return 100;
+		}
+	}
+	
+function getph($salary){
+	$select = "select `id`,`ees`,`ers` from ph where `from` <= '" . $salary . "' order by `from` desc limit 1";
+	$result = mysql_query($select, connect());
+	$row = mysql_fetch_array($result,MYSQL_ASSOC);
+	return array($row['id'],$row['ees'],$row['ers']);
+	}
+	
+$alpha = array('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z');
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Payroll System</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="Content-Type" content="text/html; charset=win 1252">
+<link rel="stylesheet" type="text/css" href="style/v31.css">
+<script type="text/javascript" src="js/main.js"></script>
+<body id="innerframe">
+<form method="POST" action="payroll_posting_gen.php">
+<input type="hidden" name="fdate" value="<? echo $date1; ?>">
+<input type="hidden" name="tdate" value="<? echo $date2; ?>">
+<input type="hidden" name="payday" value="<? echo $_GET['payday']; ?>">
+<input type="hidden" name="company_id" value="<? echo $_GET['cid']; ?>">
+
+<div style="padding:10px;"> Payroll Covered From : <b><? echo $_GET['date1']; ?></b>&nbsp;&nbsp;&nbsp;To : <b><? echo $_GET['date2']; ?></b></div>
+
+<div id="pay_id" class="pay_id" onclick="showpayid('pay_id')">MINIMIZE PAY CODE</div>
+<div class="ShowHideHeader" id="ShowHideHeader" onclick="showSH('ShowHideHeader')">Show/Hide Header</div>
+<input type="submit" class="ShowHideHeader" name="post" value="POST">
+<div class="tabmainview" id="tabmainview">
+<?
+$select = "SELECT `pay_id` FROM employee group by `pay_id` order by `pay_id` asc";
+$result = mysql_query($select, connect());
+$x=0;
+while($row = mysql_fetch_array($result,MYSQL_ASSOC)){
+?>
+<div class="tabview" id="tab<? echo $x; ?>"  onclick="onclickpayID('<? echo str_replace(" ","",$row['pay_id']); ?>')"><input type="checkbox" id="cb<? echo str_replace(" ","",$row['pay_id']); ?>" checked> <? echo $row['pay_id']; ?></div>
+<?
+}
+?>
+<div class="warning" id="load">LOADING</div>
+</div>
+<div class="tabmainview" id="SHheader" style="width:250px;">
+<div class="tabview" id="" onclick="onClck('1')"><input type="checkbox" id="cb1" checked=true> Id No.</div>
+<div class="tabview" id="" onclick="onClck('2')"><input type="checkbox" id="cb2" checked=true> Name</div>
+<div class="tabview" id="" onclick="onClck('3')"><input type="checkbox" id="cb3" checked=true> Basic As of <? echo $date1; ?></div>
+<div class="tabview" id="" onclick="onClck('4')"><input type="checkbox" id="cb4" checked=true> Absent</div>
+<div class="tabview" id="" onclick="onClck('5')"><input type="checkbox" id="cb5" checked=true> Late</div>
+<div class="tabview" id="" onclick="onClck('6')"><input type="checkbox" id="cb6" checked=true> OT</div>
+<div class="tabview" id="" onclick="onClck('7')"><input type="checkbox" id="cb7" checked=true> Rice Sub</div>
+<div class="tabview" id="" onclick="onClck('8')"><input type="checkbox" id="cb8" checked=true> Med Sud</div>
+<div class="tabview" id="" onclick="onClck('9')"><input type="checkbox" id="cb9" checked=true> Laundry</div>
+<div class="tabview" id="" onclick="onClck('10')"><input type="checkbox" id="cb10" checked=true> Other Tax Income</div>
+<? 
+$z=11;
+$k = 0;
+$select = "select `name` from deductions order by `name` asc";
+$result = mysql_query($select, connect());
+while($row = mysql_fetch_array($result,MYSQL_ASSOC)){
+?>
+<div class="tabview" id="" onclick="onClck('<? echo $z; ?>')"><input type="checkbox" id="cb<? echo $z; ?>" checked=true> <? echo $row['name']; ?></div>
+<?
+$z++;
+$k++;
+}
+?>
+<div class="tabview" id="" onclick="onClck('<? echo $z+0; ?>')"><input type="checkbox" id="cb<? echo $z+0; ?>" checked=true> SSS</div>
+<div class="tabview" id="" onclick="onClck('<? echo $z+1; ?>')"><input type="checkbox" id="cb<? echo $z+1; ?>" checked=true> PH</div>
+<div class="tabview" id="" onclick="onClck('<? echo $z+2; ?>')"><input type="checkbox" id="cb<? echo $z+2; ?>" checked=true> PI</div>
+<div class="tabview" id="" onclick="onClck('<? echo $z+3; ?>')"><input type="checkbox" id="cb<? echo $z+3; ?>" checked=true> Net Pay</div>
+</div>
+<input type="hidden" id="qqq" value="<? echo $k; ?>">
+<br>
+<div class="mainviewtable">
+<div>
+	<div id="tdz<? echo $alpha[$z+4]; ?>0" class="td10" style="height:28px;font-size:10px;">&nbsp;</div>
+	<div id="tdz<? echo $alpha[1]; ?>0" class="td70" style="height:28px;font-size:10px;">Id No.</div>
+	<div id="tdz<? echo $alpha[2]; ?>0" class="tdname" style="height:28px;font-size:10px;">Name</div>
+	<div id="tdz<? echo $alpha[3]; ?>0" class="td70" style="height:28px;font-size:10px;">Basic As of <? echo $date1; ?></div>
+	<div id="tdz<? echo $alpha[4]; ?>0" class="td70" style="height:28px;font-size:10px;">Absent</div>
+	<div id="tdz<? echo $alpha[5]; ?>0" class="td70" style="height:28px;font-size:10px;">Late</div>
+	<div id="tdz<? echo $alpha[6]; ?>0" class="td70" style="height:28px;font-size:10px;">OT</div>
+	<div id="tdz<? echo $alpha[7]; ?>0" class="td70" style="height:28px;font-size:10px;">Rice Sub</div>
+	<div id="tdz<? echo $alpha[8]; ?>0" class="td70" style="height:28px;font-size:10px;">Med Sud</div>
+	<div id="tdz<? echo $alpha[9]; ?>0" class="td70" style="height:28px;font-size:10px;">Laundry</div>
+	<div id="tdz<? echo $alpha[10]; ?>0" class="td70" style="height:28px;font-size:10px;">Other Tax Income</div>
+	<? 
+	$z=11;
+	$select = "select `name` from deductions order by `name` asc";
+	$result = mysql_query($select, connect());
+	while($row = mysql_fetch_array($result,MYSQL_ASSOC)){
+	?>
+	<div id="tdz<? echo $alpha[$z]; ?>0" class="td70" style="height:28px;font-size:10px;"><? echo $row['name']; ?></div>
+	<?
+	$z++;
+	}
+	?>
+	<div id="tdz<? echo $alpha[$z+0]; ?>0" class="td70" style="height:28px;font-size:10px;">SSS</div>
+	<div id="tdz<? echo $alpha[$z+1]; ?>0" class="td70" style="height:28px;font-size:10px;">PH</div>
+	<div id="tdz<? echo $alpha[$z+2]; ?>0" class="td70" style="height:28px;font-size:10px;">PI</div>
+	<div id="tdz<? echo $alpha[$z+3]; ?>0"class="td70" style="height:28px;font-size:10px;">Net Pay</div>
+</div>
+<?
+$payid = "";
+$select = "SELECT `em_id`, `name`, `pay_id` FROM employee order by `pay_id` asc, name asc";
+$result = mysql_query($select, connect());
+$y = 1;
+$s = 1;
+while($row = mysql_fetch_array($result,MYSQL_ASSOC)){
+if($row['pay_id'] != $payid){
+?>
+<br>
+<div id="<? echo $row['pay_id']; ?>z0">
+	<div><b><? echo $row['pay_id']; ?></b></div>
+</div>
+<?
+$s = 1;
+}
+
+$info = GetInfo($row['em_id']);
+$company = getcompany($info[3]);
+$var = CS($row['em_id'], $date1, $date2);
+$otherincome = getTaxable($row['em_id']);
+$totaladjustment = ($var['absent'] * $var['perday']) + $var['late'] + $var['ut'];
+$taxable = ($var['basic'] - $totaladjustment + $otherincome);
+$tin = gettin($taxable,$info[0],$info[1]);
+$earnings = $taxable - $tin;
+
+$rice = roundoffNoComma(getNon_Taxable($row['em_id'], 'RICE SUBSIDY'),4);
+$laund = roundoffNoComma(getNon_Taxable($row['em_id'], 'LAUNDRY ALL.'),4);
+$meds = roundoffNoComma(getNon_Taxable($row['em_id'], 'DEP. MED. ALL.'),4);
+
+$nontax = $rice + $laund + $meds;
+
+$var_sss = $company['sss'];
+$var_tin = $company['tin'];
+$var_ph = $company['ph'];
+$var_pi = $company['pi'];
+
+$varpd = explode("@", $_GET['payday']);
+$svar = $varpd[0];
+
+#social security system
+if($var_sss == $svar){
+	$sss = getsss($earnings);
+	$sss_id = $sss[0];
+	$sss_employee = $sss[1];
+	$sss_employer = $sss[2] + $sss[3];
+	}
+elseif($var_sss == 'h'){
+	$sss = getsss($earnings);
+	$sss_id = $sss[0];
+	$sss_employee = $sss[1];    
+	$sss_employer = $sss[2] + $sss[3];
+	}
+elseif($var_sss == 'hh'){
+	$pp = explode("@", $_GET['payday']);
+	if($pp[0] == 'w1'){
+		$sss = getsss($earnings);
+		$sss_id = $sss[0];
+		$sss_employee = $sss[1];    
+		$sss_employer = $sss[2] + $sss[3];
+		}
+	else{
+		$pd = 'w1@' . $pp[1];
+		$select = " select sss, earnings from posted_summary  where em_id = '" . $row['em_id'] . "' and payday = '" . $pd . "' ";
+		$pdresult = mysql_query($select, connect());
+		$pdrow = mysql_fetch_array($pdresult,MYSQL_ASSOC);
+		$pdearnings = $pdrow['earnings'] + $earnings;
+		
+		$sss = getsss($pdearnings);
+		$sss_id = $sss[0];
+		$sss_employee = $sss[1] - $pdrow['sss'];    
+		$sss_employer = $sss[2] + $sss[3];
+		}
+	}
+
+#pag-ibig
+if($var_pi == $svar){
+	$pi = getpi($earnings);
+	$pi_employee = $pi;
+	$pi_employer = $pi;
+	}
+elseif($var_pi == 'hh'){
+	$pp = explode("@", $_GET['payday']);
+	if($pp[0] == 'w1'){
+		$pi = getpi($earnings);
+		$pi_employee = $pi;
+		$pi_employer = $pi;
+		}
+	else{
+		$pi_employee = 0;
+		$pi_employer = 0;
+		}
+	}
+elseif($var_pi == 'h'){
+	$pi = getpi($earnings);
+	$pi_employee = $pi/2;
+	$pi_employer = $pi/2;
+	}
+	
+#phil health
+if($var_ph == $svar){
+	$ph = getph($earnings);
+	$ph_1d = $ph[0];
+	$ph_employee = $ph[1];
+	$ph_employer = $ph[2];
+	}
+elseif($var_ph == 'h'){
+	$ph = getph($earnings);
+	$ph_1d = $ph[0];
+	$ph_employee = $ph[1];
+	$ph_employer = $ph[2];
+	}	
+elseif($var_ph == 'hh'){
+	$pp = explode("@", $_GET['payday']);
+	if($pp[0] == 'w1'){
+		$ph = getph($earnings);
+		$ph_1d = $ph[0];
+		$ph_employee = $ph[1];
+		$ph_employer = $ph[2];
+		}
+	else{
+		$pd = 'w1@' . $pp[1];
+		$select = " select ph, earnings from posted_summary  where em_id = '" . $_GET['id'] . "' and payday = '" . $pd . "' ";
+		$pdresult = mysql_query($select, connect());
+		$pdrow = mysql_fetch_array($pdresult,MYSQL_ASSOC);
+		$pdearnings = $pdrow['earnings'] + $earnings;
+		
+		$ph = getph($pdearnings);
+		$ph_1d = $ph[0];
+		$ph_employee = $ph[1] - $pdrow['ph'];
+		$ph_employer = $ph[2];
+		}
+	}
+
+
+$netpay = $taxable - $tin - $pi_employee - $ph_employee - $sss_employee + $nontax;
+
+$csel = "select count(`em_id`) as cnt from posted where trxn_date between '" . $date1 . "' and '" . $date2 . "' and em_id = '" . $row['em_id'] . "' ";
+$cresult = mysql_query($csel, connect());
+$crow = mysql_fetch_array($cresult,MYSQL_ASSOC);
+if($crow['cnt'] > 0){
+	$disabled = 'disabled';
+	$bgcolor = 'background-color:#a8b143;';
+	}
+else{
+	$disabled = '';
+	$bgcolor = '';
+	}
+
+?>
+<div id="<? echo str_replace(" ","",$row['pay_id']) . $s; ?>">
+<div id="div<? echo $row['em_id']; ?>">
+	<div id="box<? echo $row['em_id']; ?>" class="td10"><input type="checkbox" name="cb<? echo $row['em_id']; ?>" id="cb<? echo $row['em_id']; ?>" value="<? echo $row['em_id']; ?>" onclick="chbox('<? echo $row['em_id']; ?>','tdz<? echo $alpha[1]; ?><? echo $y; ?>', 'tdz<? echo $alpha[2]; ?><? echo $y; ?>');" checked></div>
+	<div id="tdz<? echo $alpha[1]; ?><? echo $y; ?>" class="td70" style="padding-top:3px;padding-bottom:3px;"><? echo $row['em_id']; ?></div>
+	<div id="tdz<? echo $alpha[2]; ?><? echo $y; ?>" class="tdname" style="padding-top:3px;padding-bottom:3px;<? echo $bgcolor; ?>" ><? echo $row['name']; ?></div>
+	<div align="right" id="tdz<? echo $alpha[3]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($var['basic'],2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[4]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($var['absent'],0); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[5]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($var['late'],0); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[6]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($var['ot'],0); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[7]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($rice,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[8]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($laund,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[9]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($meds,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[10]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($otherincome,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<? 
+	$selectded = "select `name` from deductions order by `name` asc";
+	$resultded = mysql_query($selectded, connect());
+	$z = 11;
+	$q = 0;
+	while($rowded = mysql_fetch_array($resultded,MYSQL_ASSOC)){
+	$ded = getDeduction($row['em_id'],$rowded['name']);
+	$netpay = $netpay - $ded;
+	?>
+	<div align="right" id="tdz<? echo $alpha[$z]; ?><? echo $y; ?>" class="td70">
+		<input type="text" name="" id="<? echo $row['em_id']; ?>pal<? echo $q; ?>" value="<? echo roundoffNoComma($ded,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?> onkeyup="onkey('<? echo $row['em_id']; ?>', '<? echo $q; ?>');">
+		<input type="hidden" name="" id="<? echo $row['em_id']; ?>hid<? echo $q; ?>" value="<? echo roundoffNoComma($ded,2); ?>">
+	</div>
+	<?
+	$q++;
+	$z++;
+	}
+	?>
+	<div align="right" id="tdz<? echo $alpha[$z+0]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($sss_employee,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[$z+1]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($ph_employee,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[$z+2]; ?><? echo $y; ?>" class="td70"><input type="text" name="" id="" value="<? echo roundoffNoComma($pi_employee,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>></div>
+	<div align="right" id="tdz<? echo $alpha[$z+3]; ?><? echo $y; ?>" class="td70">
+		<input type="text" name="net<? echo $row['em_id']; ?>" id="net<? echo $row['em_id']; ?>" value="<? echo roundoffNoComma($netpay,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>>
+		<input type="hidden" name="netz<? echo $row['em_id']; ?>" id="netz<? echo $row['em_id']; ?>" value="<? echo roundoffNoComma($netpay,2); ?>" style="width:97%;text-align:right;" <? echo $disabled; ?>>
+	</div>
+</div>
+</div>
+<?
+$payid = $row['pay_id'];
+$y++;
+$s++;
+}
+?>
+</div>
+<input type="hidden" id="yyy" value="<? echo $y; ?>">
+</form>
+</body>
